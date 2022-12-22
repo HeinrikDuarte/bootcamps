@@ -1,0 +1,99 @@
+# Subindo PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 100Mi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+---
+# Subindo PV
+apiVersion: apps/v1
+kind: PersistentVolume
+metadata:
+  name: local
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 100Mi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /meubanco/
+---
+
+---
+# Subindo Banco de dados
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+spec:
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+        - image: heinrikduarte/projeto-database:1.0
+          args:
+            - "--ignore-db-dir=lost+found"
+          imagePullPolicy: Always
+          name: mysql
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: ROOT_PASSWORD
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: my-secret
+                  key: MYSQL_DATABASE
+          ports:
+            - containerPort: 3306
+              name: mysql
+
+          volumeMounts:
+            - name: local
+              mountPath: /var/lib/mysql
+      volumes:
+        - name: local
+          PersistentVolumeClaim:
+            claimName: local
+---
+# Subindo Backend PHP
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: php
+  labels:
+    app: php
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: php
+  template:
+    metadata:
+      labels:
+        app: php
+    spec:
+      containers:
+        - name: php
+          image: heinrikduarte/projeto-backend:1.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
